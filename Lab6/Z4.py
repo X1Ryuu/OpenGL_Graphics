@@ -6,19 +6,6 @@ from OpenGL.GLU import *
 from PIL import Image
 
 viewer = [0.0, 0.0, 10.0]
-mat_ambient = [1.0, 1.0, 1.0, 1.0]
-mat_diffuse = [1.0, 1.0, 1.0, 1.0]
-mat_specular = [1.0, 1.0, 1.0, 1.0]
-mat_shininess = 20.0
-
-light_ambient = [0.1, 0.1, 0.0, 1.0]
-light_diffuse = [0.8, 0.8, 0.0, 1.0]
-light_specular = [1.0, 1.0, 1.0, 1.0]
-light_position = [0.0, 0.0, 10.0, 1.0]
-att_constant = 1.0
-att_linear = 0.05
-att_quadratic = 0.001
-
 
 theta = 0.0
 pix2angle = 1.0
@@ -26,48 +13,49 @@ pix2angle = 1.0
 left_mouse_button_pressed = 0
 mouse_x_pos_old = 0
 delta_x = 0
+space_pressed = 0
 
+images = []
+hide_side = False
+flag = True # ustawiona
+texture = 0
 
 def startup():
-
-
-    update_viewport(None, 400, 400)
+    global images
+    update_viewport(None, 800, 800)
     glClearColor(0.0, 0.0, 0.0, 1.0)
     glEnable(GL_DEPTH_TEST)
-
-    glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient)
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse)
-    glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular)
-    glMaterialf(GL_FRONT, GL_SHININESS, mat_shininess)
-
-    glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient)
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse)
-    glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular)
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position)
-
-    glLightf(GL_LIGHT0, GL_CONSTANT_ATTENUATION, att_constant)
-    glLightf(GL_LIGHT0, GL_LINEAR_ATTENUATION, att_linear)
-    glLightf(GL_LIGHT0, GL_QUADRATIC_ATTENUATION, att_quadratic)
-
-    glShadeModel(GL_SMOOTH)
-    glEnable(GL_LIGHTING)
-    glEnable(GL_LIGHT0)
+    glEnable(GL_CULL_FACE)  # Włączamy face culling
+    glCullFace(GL_BACK)  # Usuwamy tylne ściany
 
     glEnable(GL_TEXTURE_2D)
-    glEnable(GL_CULL_FACE)
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
 
-    image = Image.open("tekstura.tga")
+    #image = Image.open("tekstura.tga")
+    images = [
+        Image.open("tekstura.tga"),
+        Image.open("CarbonFiber256.tga"),]
     glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGB, image.size[0], image.size[1], 0,
-        GL_RGB, GL_UNSIGNED_BYTE, image.tobytes("raw", "RGB", 0, -1)
+        GL_TEXTURE_2D, 0, GL_RGB, images[0].size[0], images[0].size[1], 0,
+        GL_RGB, GL_UNSIGNED_BYTE, images[0].tobytes("raw", "RGB", 0, -1)
     )
 
 
 def render(time):
-    global theta
+    global theta, hide_side, flag, texture, images
+
+    if flag == False:
+        texture = (texture + 1) % 2
+        glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGB, images[texture].size[0], images[texture].size[1], 0,
+            GL_RGB, GL_UNSIGNED_BYTE, images[texture].tobytes("raw", "RGB", 0, -1)
+        )
+        flag = True
+
+
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
 
@@ -79,16 +67,36 @@ def render(time):
 
     glRotatef(theta, 0.0, 1.0, 0.0)
 
-    glBegin(GL_QUADS)  # Rysowanie kwadratu
+    # Wierzchołki ostrosłupa
+    base_vertices = [
+        (-2.5, -2.5, 0.0), (-2.5, 2.5, 0.0),
+        (2.5, 2.5, 0.0), (2.5, -2.5, 0.0)
+    ]
+    top_vertex = (0.0, 0.0, 3.5)
+
+    # Rysowanie podstawy (kwadratu)
+    glBegin(GL_QUADS)
     glTexCoord2f(0.0, 0.0)
-    glVertex3f(-5.0, -5.0, 0.0)
+    glVertex3fv(base_vertices[0])
     glTexCoord2f(1.0, 0.0)
-    glVertex3f(5.0, -5.0, 0.0)
+    glVertex3fv(base_vertices[1])
     glTexCoord2f(1.0, 1.0)
-    glVertex3f(5.0, 5.0, 0.0)
+    glVertex3fv(base_vertices[2])
     glTexCoord2f(0.0, 1.0)
-    glVertex3f(-5.0, 5.0, 0.0)
+    glVertex3fv(base_vertices[3])
     glEnd()
+
+    # Rysowanie ścian bocznych (trójkątów)
+    if not hide_side:
+        glBegin(GL_TRIANGLES)
+        for i in range(4):
+            glTexCoord2f(0.5, 1.0)
+            glVertex3fv(top_vertex)
+            glTexCoord2f(0.0, 0.0)
+            glVertex3fv(base_vertices[i])
+            glTexCoord2f(1.0, 0.0)
+            glVertex3fv(base_vertices[(i - 1) % 4])
+        glEnd()
 
     glFlush()
 
@@ -110,6 +118,17 @@ def update_viewport(window, width, height):
     glLoadIdentity()
 
 
+def keyboard_key_callback(window, key, scancode, action, mods):
+    global hide_side
+    global space_pressed
+    global flag
+
+    if key == GLFW_KEY_H and action == GLFW_PRESS:
+        hide_side = not hide_side
+    if key == GLFW_KEY_SPACE and action == GLFW_PRESS:
+        space_pressed = 1
+        flag = False
+
 def mouse_motion_callback(window, x_pos, y_pos):
     global delta_x, mouse_x_pos_old
     delta_x = x_pos - mouse_x_pos_old
@@ -128,13 +147,14 @@ def main():
     if not glfwInit():
         sys.exit(-1)
 
-    window = glfwCreateWindow(400, 400, "Textured Square", None, None)
+    window = glfwCreateWindow(800, 800, "Textured Pyramid", None, None)
     if not window:
         glfwTerminate()
         sys.exit(-1)
 
     glfwMakeContextCurrent(window)
     glfwSetFramebufferSizeCallback(window, update_viewport)
+    glfwSetKeyCallback(window, keyboard_key_callback)
     glfwSetCursorPosCallback(window, mouse_motion_callback)
     glfwSetMouseButtonCallback(window, mouse_button_callback)
     glfwSwapInterval(1)
